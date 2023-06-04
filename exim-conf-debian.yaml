@@ -1,0 +1,150 @@
+# -*- mode: yaml; coding: utf-8 -*-
+- name: Настройка Exim
+  vars:
+    ## Да, переменным можно давать имена в другом алфавите.
+    смартхост: smtp.mail.ru
+    логин: AzureDiamond@mail.ru
+    пароль: hunter2
+    ##
+  hosts: smtp
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Установка Exim и инструментов
+      ansible.builtin.apt:
+        name:
+          - exim4
+          - swaks
+          - patch
+          - debconf
+          - debconf-utils
+        state: present
+    - name: Реконфигурация Exim с помощью debconf
+      ansible.builtin.debconf:
+        name: exim4-config
+        question: "{{ item.name }}"
+        vtype: "{{ item.vtype }}"
+        value: "{{ item.value }}"
+      loop:
+        - name: exim4/dc_eximconfig_configtype
+          vtype: select
+          value: mail sent by smarthost; received via SMTP or fetchmail
+        - name: exim4/mailname
+          vtype: string
+          value: "{{ ansible_fqdn }}"
+        - name: exim4/no_config
+          vtype: boolean
+          value: 'false'
+        - name: exim4/dc_other_hostnames
+          vtype: string
+          value: "{{ ansible_fqdn }}"
+        - name: exim4/dc_relay_domains
+          vtype: string
+          value: ""
+        - name: exim4/dc_relay_nets
+          vtype: string
+          value: ""
+        - name: exim4/dc_readhost
+          vtype: string
+          value: "{{ ansible_fqdn }}"
+        - name: exim4/dc_smarthost
+          vtype: string
+          value: "{{ смартхост }}"
+        - name: exim4/dc_postmaster
+          vtype: string
+          value: "{{ lookup('env','USER') }}"
+        - name: exim4/dc_local_interfaces
+          vtype: string
+          value:  127.0.0.1 ; ::1
+        - name: exim4/dc_minimaldns
+          vtype: boolean
+          value: 'false'
+        - name: exim4/use_split_config
+          vtype: boolean
+          value: 'true'
+        - name: exim4/hide_mailname
+          vtype: boolean
+          value: 'true'
+        - name: exim4/dc_localdelivery
+          vtype: select
+          value: mbox format in /var/mail/
+
+    - name: Проверка /var/lib/dpkg/info/exim4-config.config
+      ansible.builtin.stat:
+        path: /var/lib/dpkg/info/exim4-config.config
+      register: check_file_name
+    - name: Резервирование /var/lib/dpkg/info/exim4-config.config (1)
+      ansible.builtin.copy:
+        remote_src: true
+        src: /var/lib/dpkg/info/exim4-config.config
+        dest: /var/lib/dpkg/info/exim4-config.config.ignore
+      when: check_file_name.stat.exists
+    - name: Удаление /var/lib/dpkg/info/exim4-config.config (2)
+      ansible.builtin.file:
+        path: /var/lib/dpkg/info/exim4-config.config
+        state: absent
+
+    - name: Выполнение dpkg-reconfigure
+      ansible.builtin.command: dpkg-reconfigure -f noninteractive exim4-config
+    - name: Генерация файла паролей для сервера Exim
+      ansible.builtin.template:
+        src: passwd.j2
+        dest: /etc/exim4/passwd
+        owner: root
+        group: Debian-exim
+        mode: '0640'                
+    - name: Генерация файла passwd.client
+      ansible.builtin.template:
+        src: passwd.client.j2
+        dest: /etc/exim4/passwd.client
+        owner: root
+        group: Debian-exim
+        mode: '0640'
+
+    - name: Генерация файла паролей для смартхостов
+      ansible.builtin.template:
+        src: passwd.smarthosts.j2
+        dest: /etc/exim4/passwd.smarthosts
+        owner: root
+        group: Debian-exim
+        mode: '0640'
+
+    - name: Генерация файла описания транспортов 40_smarthosts
+      ansible.builtin.template:
+        src: 40_smarthosts.j2
+        dest: /etc/exim4/conf.d/transport/40_smarthosts
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Генерация файла smarthosts для маршрутизации
+      ansible.builtin.template:
+        src: smarthosts.j2
+        dest: /etc/exim4/smarthosts
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Копирование файла с описанием маршрутизатора
+      ansible.builtin.copy:
+        src: 175_exim4-config_multismart
+        dest: /etc/exim4/conf.d/router/175_exim4-config_multismart
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Исправление /etc/exim4/conf.d/auth/30_exim4-config_examples
+      ansible.builtin.patch:
+        dest: /etc/exim4/conf.d/auth/30_exim4-config_examples
+        src: 30_exim4-config_examples.diff
+    - name: Настройка tls в 03_exim4-config_tlsoptions
+      ansible.builtin.lineinfile:
+        line: tls_on_connect_ports = 465
+        path: /etc/exim4/conf.d/main/03_exim4-config_tlsoptions
+        insertafter: EOF
+    - name: Генерация файла конфигурации
+      become: true
+      ansible.builtin.command:
+        cmd: /sbin/update-exim4.conf
+    - name: Перезапуск службы Exim
+      become: true
+      ansible.builtin.service:
+        name: exim4
+        state: restarted

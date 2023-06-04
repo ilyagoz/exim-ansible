@@ -1,0 +1,3 @@
+{{ логин }}:{{ пароль | ansible.builtin.password_hash(hashtype="blowfish")  }}
+
+{% include 'secrets/passwd' ignore missing %}

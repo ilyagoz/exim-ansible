@@ -1,0 +1,11 @@
+# -*- mode: jinja2; coding: utf-8 -*-
+### логин_на_локальном_сервере:логин_на_сервере_провайдера:пароль_на_сервере_провайдера
+# Пользователь авторизуется на локальном сервере под именем
+# AzureDiamond, а на сервере Mail.ru логином должен быть адрес целиком
+AzureDiamond:AzureDiamond@mail.ru:hunter2
+# Для Gmail логином служит адрес целиком
+AzureDiamond@gmail.com:AzureDiamond@gmail.com:hunter2
+# Для Яндекс Почты логином служит часть адреса до @
+AzureDiamond@ya.ru:AzureDiamond:hunter2
+
+{% include 'secrets/passwd.smarthosts' ignore missing %}

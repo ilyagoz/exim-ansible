@@ -1,0 +1,2 @@
+[smtp]
+192.168.112.191 ansible_user=ivg

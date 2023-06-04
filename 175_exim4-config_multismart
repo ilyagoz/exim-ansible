@@ -1,0 +1,17 @@
+# -*- mode: conf-unix; coding: utf-8 -*-
+.ifdef DCconfig_smarthost DCconfig_satellite
+
+SMARTHOST_TRANSPORT = ${extract{1}{:}{${lookup{$authenticated_id}nwildlsearch{CONFDIR/smarthosts}{$value}}}}
+
+smarthost_multi:
+    debug_print = "R: smarthost_multi for $local_part@$domain  $authenticated_id"
+    driver = manualroute
+    condition =  ${if eq {SMARTHOST_TRANSPORT}{}{no}{yes}}
+    domains = !+local_domains
+    route_list = "* $domain"
+    transport = SMARTHOST_TRANSPORT
+    ignore_target_hosts = <; 0.0.0.0 ; 127.0.0.0/8 ; ::1
+    host_find_failed = ignore
+    same_domain_copy_routing = yes
+
+.endif

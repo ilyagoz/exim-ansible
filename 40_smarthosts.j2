@@ -1,0 +1,60 @@
+# -*- mode: conf-unix; coding: utf-8 -*-
+mailru:
+    # См. https://help.mail.ru/mail/mailer/popsmtp
+    debug_print = "T:  mailru for $local_part@$domain"
+    driver = smtp
+
+    hosts = smtp.mail.ru
+
+    hosts_override = true
+    helo_data = localhost
+    port = 465
+    protocol = smtps
+    hosts_require_auth = *
+    hosts_require_tls = *
+    tls_verify_hosts = *
+
+gmail:
+    # См. https://support.google.com/mail/answer/7126229
+    debug_print = "T:  gmail for $local_part@$domain"
+    driver = smtp
+
+    hosts = smtp.gmail.com
+
+    hosts_override = true
+    helo_data = localhost
+    port = 587
+    hosts_require_auth = *
+    hosts_require_tls = *
+    tls_verify_hosts = *
+
+yandex:
+    # См. https://yandex.ru/support/mail/mail-clients/others.html
+    debug_print = "T:  yandex for $local_part@$domain"
+    driver = smtp
+
+    hosts = smtp.yandex.ru
+
+    hosts_override = true
+    helo_data = localhost
+    port = 465
+    protocol = smtps
+    hosts_require_auth = *
+    hosts_require_tls = *
+    tls_verify_hosts = *
+
+ms:
+    # См. https://support.microsoft.com/ru-ru/office/%D0%BD%D0%B0%D1%81%D1%82%D1%80%D0%BE%D0%B9%D0%BA%D0%B0-pop-imap-%D0%B8-smtp-%D0%B4%D0%BB%D1%8F-outlook-com-d088b986-291d-42b8-9564-9c414e2aa040
+    debug_print = "T:  ms for $local_part@$domain"
+    driver = smtp
+
+    hosts = smtp-mail.outlook.com
+
+    hosts_override = true
+    helo_data = localhost
+    port = 587
+    hosts_require_auth = *
+    hosts_require_tls = *
+    tls_verify_hosts = *
+
+{% include 'secrets/40_smarthosts' ignore missing %}
