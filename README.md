@@ -1,11 +1,9 @@
 
-# Table of Contents
+# Содержание
 
 1.  [Что это и зачем](#orge7bb79d)
 2.  [Настройка с помощью Ansible](#orgf49bf0b)
 3.  [Проверка](#org5a02cd0)
-
-
 
 <a id="orge7bb79d"></a>
 
@@ -42,7 +40,6 @@ Mail.ru, Яндекс и так далее и заставить Exim самос
 Debian](https://wiki.debian.org/Exim) с раздельными файлами. Полученную конфигурацию можно
 использовать и на домашнем компьютере, и на облачном сервере для
 отправки уведомлений от различных сервисов и так далее.
-
 
 <a id="orgf49bf0b"></a>
 
@@ -89,7 +86,6 @@ Debian](https://wiki.debian.org/Exim) с раздельными файлами. 
 
     ansible-playbook exim-conf-debian.yaml -i inventory
 
-
 <a id="org5a02cd0"></a>
 
 # Проверка
@@ -105,8 +101,7 @@ Debian](https://wiki.debian.org/Exim) с раздельными файлами. 
 
 <del>Изучите сообщения об ошибках и доработайте напильником</del>.
 
-
-# Footnotes
+# Примечания
 
 <sup><a id="fn.1" href="#fnr.1">1</a></sup> [exim: select smarthost according to sender address](https://www.volker-wegert.de/de/node/25)
 
