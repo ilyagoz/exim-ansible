@@ -1,0 +1,379 @@
+#+TITLE: Настройка Exim для отправки почты на несколько провайдеров
+#+SETUPFILE: ~/.emacs.d/org-themes/src/readtheorg_inline/readtheorg_inline.theme
+# 
+
+* Что это и зачем
+  
+Сегодня мы наконец настроим почтовый сервер [[https://exim.org][Exim]] (версии 4) для одного
+распространенного сценария использования, который, к сожалению,
+последовательно, хотя и не без причины, игнорируется разработчиками
+дистрибутивов.
+
+Exim выбран почтовым сервером по умолчанию в Debian и в производных от
+него дистрибутивах. Если вам уже приходилось устанавливать Exim, то,
+вероятно, вы имели дело с одним из таких дистрибутивов и системой
+конфигурации, в которой предусмотрен вариант "отправка почты через
+smarthost". Для домашнего пользователя таким smarthost ("умным"
+хостом) обычно будет крупный сервис электронной почты вроде Gmail. В
+корпоративной сети, возможно, будет свой "умный" хост.
+
+*Проблема*: smarthost в стандартной конфигурации может быть только
+один. Некуда вписать пароли от всех ваших учетных записей на Gmail,
+Mail.ru, Яндекс и так далее и заставить Exim самостоятельно отправлять
+ваши письма на нужный сервис в зависимости, например, от обратного
+адреса.
+
+Разумеется, Exim сам по себе способен сделать с почтой все, что
+угодно, вопрос только в конфигурации. К сожалению, простого и, что
+самое главное, общепринятого решения этой проблемы не придумано. Можно
+найти некоторые предложения [fn:2] [fn:3] [fn:1] [fn:4], но все они
+страдают определенными ограничениями.
+
+*Решение*. Ниже показан вариант, требующий минимальных изменений в
+стандартной конфигурации. При этом все ее возможности
+сохраняются. Способ настройки рассчитан на [[https://wiki.debian.org/Exim][систему конфигурации Exim4 в
+Debian]] с раздельными файлами. Полученную конфигурацию можно
+использовать и на домашнем компьютере, и на облачном сервере для
+отправки уведомлений от различных сервисов и так далее. В следующий
+раз я покажу, как настраивать Exim в других дистрибутивах, одним
+файлом.
+
+Если вы знакомы с Ansible, можете сразу [[https://github.com/ilyagoz/exim-ansible][скачать скрипт и
+дополнительные файлы с моего гитхаба]] и перейти к разделу [[*Настройка с помощью Ansible][Настройка с
+помощью Ansible]].
+
+* Настройка вручную
+
+Для начала запустите =dpkg-reconfigure exim4-config=, выберите
+"отправка почты через smarthost; приём по SMTP или через
+fetchmail". Настройте этот smarthost, как описано в стандартном
+руководстве -- он будет использоваться по умолчанию, если для
+конкретного пользователя не указан другой smarthost.
+  
+Так как теперь у нас несколько "умных" хостов, нужно решить, как мы
+будем определять, на какой из отправлять отдельно взятое письмо. Можно
+смотреть на обратный адрес в заголовке =From:= -- если письмо от
+=example@mail.ru=, то отправляем его на Mail.ru -- но это не очень
+хорошая идея. Почтовые программы (и Exim тоже) по умолчанию не
+доверяют тому, что пишет пользователь в заголовке =From:=. Нам нужна
+аутентификация.
+
+Мы заведем непосредственно на локальном сервере Exim по
+пользователю[fn:5] для каждой учетной записи на сервере
+провайдера. Этим пользователям удобно давать имена, совпадающие с
+адресами почты у провайдера (=example@mail.ru=), но можно давать и
+любые другие. Важно, чтобы пользователь в итоге прошел аутентификацию
+и Exim знал его идентификатор [fn:6].
+
+** Аутентификация на локальном сервере Exim
+
+Раскомментируйте в файле
+=/etc/exim4/conf.d/auth/30_exim4-config_examples= нужные способы
+аутентификации. Обычно это =plain_server:= и =login_server:=.
+
+Exim поддерживает много способов аутентификации, и их настройка
+[[https://www.opennet.ru/docs/RUS/exim_guide/1233.html][описана в документации]]. В конфигурации в Debian пользователи и хэши
+паролей записываются в файле =/etc/exim4/passwd= следующего формата:
+
+#+begin_src conf-unix
+AzureDiamond@mail.ru:$2b$12$8XQqds.oqY2aG0.a/UNOzeC04SFmIi1ugrmLSK.RCi73QFocO610C
+#+end_src
+
+а добавить их туда можно скриптом
+=/usr/share/doc/exim4-base/examples/exim-adduser=.
+
+** Шифрование TLS
+
+Почти всегда лучше включить шифрование с помощью TLS. В конфигурации в
+Debian оно настраивается в файле
+=/etc/exim4/conf.d/main/03_exim4-config_tlsoptions=. Обычно настройки
+по умолчанию работают, и нужно только положить в каталог =/etc/exim4=
+файлы ключа и сертификата. Самоподписанный сертификат можно
+сгенерировать скриптом
+=/usr/share/doc/exim4-base/examples/exim-gencert=. Однако учтите, что
+требовательные почтовые клиенты (например, Thunderbird) не будут
+работать с самоподписанным сертификатом. Лучше получить "настоящий"
+сертификат, например, от Let's Encrypt. Эту процедуру мы здесь
+описывать не будем, она многократно описывалась в других руководствах.
+
+** Аутентификация на внешних почтовых серверах
+
+Крупные провайдеры электронной почты не будут принимать почту от
+никому не известных серверов. Точнее, принимать они будут, но
+вероятность попадания такой почты в спам будет велика, даже если вы
+[[https://interface31.ru/tech_it/2022/12/nastraivaem-svoy-pochtovyy-server-chto-nuzhno-znat-likbez.html][кругом обвешаете свой сервер SPF, DKIM и DMARC]]. Нам нужна обычная
+учетная запись электронной почты с логином и паролем. Не забудьте, что
+провайдеры сейчас требуют заводить для почтовых программ отдельные
+пароли. В Gmail это называется "[[https://support.google.com/accounts/answer/6010255][Менее защищенные приложения]]" и "[[https://support.google.com/accounts/answer/185833][Пароли
+приложений]]". В Mail.ru -- "[[https://help.mail.ru/id/settings/external?ysclid=lhw32arbux754592824][Пароли для внешних приложений]]". Эти пароли
+и логины мы укажем в файле =/etc/exim4/passwd.smarthosts= следующего
+формата:
+
+
+#+begin_src conf-unix :tangle passwd.smarthosts
+  # -*- mode: conf-unix; coding: utf-8 -*-
+  ### логин_на_локальном_сервере:логин_на_сервере_провайдера:пароль_на_сервере_провайдера
+  # Пользователь авторизуется на локальном сервере под именем
+  # AzureDiamond, а на сервере Mail.ru логином должен быть адрес почты
+  # целиком
+  AzureDiamond:AzureDiamond@mail.ru:hunter2
+  # Для Gmail логином тоже служит адрес целиком
+  AzureDiamond@gmail.com:AzureDiamond@gmail.com:hunter2
+  # Для Яндекс Почты логином служит часть адреса до @
+  AzureDiamond@ya.ru:AzureDiamond:hunter2
+#+end_src
+
+Не забудьте установить права доступа на файл с паролями:
+
+#+begin_src sh
+  chown root:Debian-exim /etc/exim4/passwd.smarthosts && \
+      chmod 640 /etc/exim4/passwd.smarthosts
+#+end_src
+
+** Настройки подключения к серверам
+
+Для каждого сервера мы создадим отдельный транспорт[fn:7], работающий
+по протоколу SMTP. Описания этих транспортов будут храниться в файле
+=/etc/exim4/conf.d/transport/40_smarthosts=. Его нужно создать и
+заполнить (скрипт для Ansible сделает это).  В примере ниже даны
+примеры настроек для Mail.ru и Gmail. Обратите внимание, что для
+Mail.ru нужно указать =port = 465= и =protocol = smtps=, а Gmail
+работает с =port = 587=. Про порты и протоколы можно почитать,
+например, [[https://habr.com/ru/articles/495256/][здесь]].
+
+#+begin_src conf-unix :tangle 40_smarthosts
+  # -*- mode: conf-unix; coding: utf-8 -*-
+  mailru:
+      # См. https://help.mail.ru/mail/mailer/popsmtp
+      debug_print = "T:  mailru for $local_part@$domain"
+      driver = smtp
+
+      hosts = smtp.mail.ru
+
+      hosts_override = true
+      helo_data = localhost
+      port = 465
+      protocol = smtps
+      hosts_require_auth = *
+      hosts_require_tls = *
+      tls_verify_hosts = *
+
+  gmail:
+      # См. https://support.google.com/mail/answer/7126229
+      debug_print = "T:  gmail for $local_part@$domain"
+      driver = smtp
+
+      hosts = smtp.gmail.com
+
+      hosts_override = true
+      helo_data = localhost
+      port = 587
+      hosts_require_auth = *
+      hosts_require_tls = *
+      tls_verify_hosts = *
+#+end_src
+
+** Правила отправки почты
+
+Создайте файл =/etc/exim4/smarthosts=. В этом файле в каждой строке
+будет описано правило отправки почты на серверы в зависимости от
+идентификатора пользователя.
+
+Первое поле - шаблон для идентификатора пользователя, под которым он
+зарегистрирован на локальном сервере Exim. Обычно он указан в файле
+=/etc/exim4/passwd=, однако Exim поддерживает множество способов
+аутентификации, и у вас может быть настроен любой. Тут можно
+использовать шаблон, а можно указать отдельный идентификатор.
+
+Второе поле - название транспорта в конфигурации Exim. Мы настроили их
+выше в =/etc/exim4/conf.d/transport/40_smarthosts=.
+
+#+begin_src conf-unix :tangle smarthosts
+  # -*- mode: conf-unix; coding: utf-8 -*-
+  # шаблон имени отправителя ($authenticated_id):название транспорта
+  ,*@gmail.com:gmail
+  ,*@mail.ru:mailru
+  ,*@list.ru:mailru
+  ,*@bk.ru:mailru
+  ,*@inbox.ru:mailru
+#+end_src
+
+** Логика маршрутизации и аутентификации
+
+Создайте файл =/etc/exim4/conf.d/router/175_exim4-config_multismart=
+следующего содержания:
+
+#+begin_src conf-unix :tangle 175_exim4-config_multismart
+  # -*- mode: conf-unix; coding: utf-8 -*-
+  .ifdef DCconfig_smarthost DCconfig_satellite
+
+  SMARTHOST_TRANSPORT = ${extract{1}{:}{${lookup{$authenticated_id}nwildlsearch{CONFDIR/smarthosts}{$value}}}}
+
+  smarthost_multi:
+      debug_print = "R: smarthost_multi for $local_part@$domain"
+      driver = manualroute
+      condition =  ${if eq {SMARTHOST_TRANSPORT}{}{no}{yes}}
+      domains = !+local_domains
+      route_list = "* $domain"
+      transport = SMARTHOST_TRANSPORT
+      ignore_target_hosts = <; 0.0.0.0 ; 127.0.0.0/8 ; ::1
+      host_find_failed = ignore
+      same_domain_copy_routing = yes
+
+  .endif
+#+end_src
+
+В этом файле описан маршрутизатор, выбирающий транспорт в зависимости
+от идентификатора пользователя по правилам, описанным в
+=/etc/exim4/smarthosts=.  Опция =route_list= не будет использоваться
+транспортом, так как в нем будет установлено =hosts_override =
+true=. =SMARTHOST_TRANSPORT= извлекает первое поле из строки в файле
+=/etc/exim4/smarthosts=, ключом при этом является =$authenticated_id=,
+то есть имя, под которым пользователь авторизовался, отправляя письмо
+на наш локальный сервер.
+
+Теперь самая запутанная часть настройки. В Exim аутентификацию
+выполняют так называемые "аутентификаторы", и они делятся по
+типам. Например, традиционную аутентификацию с паролем и логином
+выполняет аутентификатор =plaintext=, и он должен сам где-то брать эти
+пароли для всех серверов, с которыми он будет связываться. В Debian
+эти пароли лежат в =/etc/exim4/passwd.client=, и, увы, конфигурация
+допускает только один пароль/логин на сервер. Поэтому не получится
+настроить отправку для нескольких учетных записей на одном сервере
+(=user1@mail.ru=, =user2@mail.ru=...)
+
+У нас пароли лежат, напоминаю, в =/etc/exim4/passwd.smarthosts=, а
+аутентификаторы описаны в
+=/etc/exim4/conf.d/auth/30_exim4-config_examples=. Чтобы научить
+аутентификатор искать пароли в =/etc/exim4/passwd.smarthosts=,
+примените к =/etc/exim4/conf.d/auth/30_exim4-config_examples=
+следующий патч:
+   
+#+begin_src diff :tangle 30_exim4-config_examples.diff
+--- /etc/exim4/conf.d/auth/30_exim4-config_examples
++++ 30_exim4-config_examples
+@@ -210,13 +210,14 @@
+   client_name = ${extract{1}{:}{${lookup{$host}nwildlsearch{CONFDIR/passwd.client}{$value}fail}}}
+   client_secret = ${extract{2}{:}{${lookup{$host}nwildlsearch{CONFDIR/passwd.client}{$value}fail}}}
+ 
++PLINE=${lookup{$authenticated_id}nwildlsearch{CONFDIR/passwd.smarthosts}{$value}{}}
+ # this returns the matching line from passwd.client and doubles all ^
+-PASSWDLINE=${sg{\
+-                ${lookup{$host}nwildlsearch{CONFDIR/passwd.client}{$value}fail}\
+-	        }\
+-	        {\\N[\\^]\\N}\
+-	        {^^}\
+-	    }
++PASSWDLINE=${if eq{PLINE}{}{${sg{\
++               ${lookup{$host}nwildlsearch{CONFDIR/passwd.client}{$value}fail}\
++               }\
++               {\\N[\\^]\\N}\
++               {^^}\
++           }}{${sg{PLINE}{\\N[\\^]\\N}{^^}}}}
+ 
+ plain:
+   driver = plaintext
+#+end_src
+
+Это можно сделать командой:
+#+begin_src sh
+patch /etc/exim4/conf.d/auth/30_exim4-config_examples ./30_exim_config_examples.diff
+#+end_src
+
+Скрипт для Ansible сделает это сам.
+
+* Завершение настройки и проверка
+
+Перегенерируйте конфигурацию Exim и перезапустите сервис.
+
+#+begin_src sh
+  /sbin/update-exim4.conf && systemctl restart exim4
+#+end_src
+
+Отправлять тестовые письма удобно с помощью [[https://github.com/jetmore/swaks][Swaks]]. Пример:
+
+#+begin_src sh
+  swaks -tls -a \
+	--to user@example.com \
+	--from <ваш адрес> \
+	--server localhost \
+	--auth-user <ваш логин на *локальном* сервере> \
+	--auth-password  <ваш пароль на *локальном* сервере>
+#+end_src
+
+* Настройка с помощью Ansible
+
+Впишите в файл =inventory= адрес настраиваемой машины и имя
+пользователя, от которого будет работать Ansible. Разумеется, этот
+пользователь должен иметь возможность становиться =root=.
+
+Впишите в раздел =vars= файла =exim-conf-debian.yaml= данные для
+доступа к smarthost-серверу, который будет использоваться по
+умолчанию, если среди правил отправки не найдется
+подходящего. Образец:
+
+#+begin_src yaml
+  vars:
+    смартхост: smtp.mail.ru
+    логин: AzureDiamond@mail.ru
+    пароль: hunter2
+#+end_src
+
+Откройте файл =40_smarthosts.j2= и посмотрите, нет ли там готовых
+конфигураций для нужных вам провайдеров. Если нет, впишите
+свою конфигурацию.
+
+Откройте файл =smarthosts.j2= и посмотрите, нет ли там готовых правил
+для отправки почты. Если нет, впишите свои правила. Пример:
+#+begin_src yaml
+  user1:mailru
+  ,*@inbox.ru:mailru
+#+end_src
+
+При желании, добавьте локальных пользователей в файл =passwd.j2=. По
+умолчанию там будет только один пользователь с тем же логином и
+паролем, что используется для доступа к smarthost-серверу по умолчанию
+(см. выше). Пользователей можно будет добавить позже с помощью скрипта
+=/usr/share/doc/exim4-base/examples/exim-adduser= или
+вручную. См. =man exim4-config_files=, раздел =/etc/exim4/passwd=.
+
+Впишите логины и пароли для отправки почты на SMTP-серверы нужных вам
+провайдеров в =passwd.smarthosts.j2=. Пример:
+
+#+begin_src conf-unix
+  # Для Яндекс Почты логином служит часть адреса до @
+  AzureDiamond@ya.ru:AzureDiamond:hunter2
+#+end_src
+
+Запустите скрипт.
+
+#+begin_src sh
+ansible-playbook exim-conf-debian.yaml -i inventory
+#+end_src
+
+Проверьте, как описано в разделе [[*Завершение настройки и проверка][Завершение настройки и проверка.]]
++Изучите сообщения об ошибках и доработайте напильником+.
+
+* Footnotes
+
+[fn:7]Транспортом в Exim называется механизм передачи сообщения в
+место назначения - удаленный сервер, локальный файл и так далее.
+
+[fn:6]Этот идентификатор при работе будет
+храниться в стандартной переменной =$authenticated_id=.
+
+[fn:5]Не путайте пользователей локального сервера Exim с
+пользователями системы. У одного пользователя системы может быть
+несколько учетных записей электронной почты на внешних серверах, и
+каждой из них будет соответствовать один пользователь локального
+сервера Exim.
+
+
+[fn:4][[https://qna.habr.com/q/394926#comment_1302834][Как настроить Exim на несколько ящиков?]] 
+
+[fn:1][[https://medium.com/@krala/exim4-and-multiple-gmail-accounts-c8fae2ac60a3][Exim4 and multiple gmail accounts]]
+
+[fn:3][[https://alioth-lists.debian.net/pipermail/pkg-exim4-users/2015-May/002236.html][[Pkg-exim4-users] selecting smarthost based on sender address]] 
+
+[fn:2][[https://www.volker-wegert.de/de/node/25][exim: select smarthost according to sender address]] 
+
